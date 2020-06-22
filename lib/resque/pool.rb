@@ -51,7 +51,7 @@ module Resque
   class Pool
     SIG_QUEUE_MAX_SIZE = 5
     DEFAULT_WORKER_INTERVAL = 5
-    QUEUE_SIGS = [ :QUIT, :INT, :TERM, :USR1, :USR2, :CONT, :HUP, :WINCH, ]
+    QUEUE_SIGS = [ :QUIT, :INT, :TERM, :USR1, :USR2, :CONT, :HUP, :WINCH, Signal.signame(29).to_sym ]
     CHUNK_SIZE = (16 * 1024)
 
     include Logging
@@ -101,14 +101,26 @@ module Resque
 
     ##
     # :call-seq:
-    #   after_prefork do |worker, pid, workers| ... end  => add a hook
-    #   after_prefork << hook                            => add a hook
+    #   after_spawn do |worker, pid, workers| ... end  => add a hook
+    #   after_spawn << hook                            => add a hook
     #
     # The `after_spawn` hooks will run in the master after spawning a new
     # worker.
     #
     # :yields: worker, pid, workers
     hook :after_spawn
+
+    ##
+    # :call-seq:
+    #   siginfo do |pool_instance, pid, workers| ... end  => add a hook
+    #   siginfo << hook                                   => add a hook
+    #
+    # The `siginfo` hooks will run in the master after receiving a SIGINFO 29 signal.
+    # A given block will receive the instance of the running manager pool,
+    # the manager pid and the workers hash.
+    #
+    # :yields: pid, workers
+    hook :siginfo
 
     # }}}
     # Config: class methods to start up the pool using the config loader {{{
@@ -273,6 +285,11 @@ module Resque
         else
           shutdown_everything_now!(signal)
         end
+      when Signal.signame(29).to_sym
+        maintain_worker_count
+        Thread.start(self, Process.pid, workers) do |instance, pid, workers|
+          call_siginfo!(instance, pid, workers)
+        end.join
       end
     end
 
