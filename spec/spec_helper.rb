@@ -24,4 +24,3 @@ RSpec.configure do |config|
     ENV.delete 'RESQUE_POOL_CONFIG'
   }
 end
-
